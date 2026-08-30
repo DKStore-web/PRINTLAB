@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gestão & Catálogo Impressão 3D</title>
+  <style>
+    :root {
+      --bg: #121214;
+      --card-bg: #202024;
+      --accent: #00875f;
+      --accent-hover: #00b37e;
+      --text: #e1e1e6;
+      --text-sub: #a8a8b3;
+      --border: #323238;
+      --danger: #f75a68;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 15px;
+      display: flex;
+      justify-content: center;
+    }
+    .app { width: 100%; max-width: 650px; }
+    h1, h2 { text-align: center; color: var(--text); margin-bottom: 15px; }
+    
+    /* ABAS */
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .tab-btn {
+      flex: 1; padding: 12px; background: var(--card-bg); color: var(--text-sub);
+      border: 1px solid var(--border); border-radius: 6px; cursor: pointer; font-weight: bold;
+    }
+    .tab-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    .card {
+      background: var(--card-bg); border-radius: 8px; padding: 16px;
+      margin-bottom: 20px; border: 1px solid var(--border);
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    label { display: block; font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+    input, select {
+      width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); box-sizing: border-box; margin-bottom: 10px;
+    }
+    button {
+      width: 100%; padding: 12px; border-radius: 6px; border: none;
+      background: var(--accent); color: white; font-weight: bold; cursor: pointer; transition: 0.2s;
+    }
+    button:hover { background: var(--accent-hover); }
+    .kpi-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
+    .kpi { background: var(--bg); padding: 10px; border-radius: 6px; border: 1px solid var(--border); }
+    .kpi-val { font-size: 14px; font-weight: bold; margin-top: 4px; }
+    .kpi-val.green { color: var(--accent-hover); }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--border); padding: 8px; text-align: left; }
+    th { color: var(--text-sub); }
+    .btn-delete { background: var(--danger); width: auto; padding: 4px 8px; font-size: 11px; }
+
+    /* CATÁLOGO CARDS */
+    .catalogo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
+    .product-card {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+      display: flex; flex-direction: column;
+    }
+    .product-img { width: 100%; height: 140px; object-fit: cover; background: #2a2a2e; }
+    .product-info { padding: 10px; flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+    .product-title { font-weight: bold; font-size: 14px; margin-bottom: 5px; }
+    .product-price { color: var(--accent-hover); font-weight: bold; font-size: 15px; }
+    .product-cost { color: var(--text-sub); font-size: 11px; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <h1>Gestão Impressão 3D</h1>
+
+  <!-- NAVEGAÇÃO DE ABAS -->
+  <div class="nav-tabs">
+    <button class="tab-btn active" onclick="mudarAba('gestao')">Calculadora & Vendas</button>
+    <button class="tab-btn" onclick="mudarAba('catalogo')">Catálogo de Produtos</button>
+  </div>
+
+  <!-- ABA 1: GESTÃO E CALCULADORA -->
+  <div id="aba-gestao" class="tab-content active">
+    
+    <!-- CONFIGURAÇÕES DE CUSTO BASE -->
+    <div class="card">
+      <h2>1. Configurações de Custo Base</h2>
+      <div class="grid">
+        <div>
+          <label>Preço Rolo Filamento (R$)</label>
+          <input type="number" id="precoRolo" value="120" oninput="calcular()">
+        </div>
+        <div>
+          <label>Peso do Rolo (g)</label>
+          <input type="number" id="pesoRolo" value="1000" oninput="calcular()">
+        </div>
+        <div>
+          <label>Potência Impressora (W)</label>
+          <input type="number" id="potenciaW" value="200" oninput="calcular()">
+        </div>
+        <div>
+          <label>Custo do kWh (R$)</label>
+          <input type="number" id="custoKwh" step="0.01" value="0.85" oninput="calcular()">
+        </div>
+      </div>
+    </div>
+
+    <!-- CALCULADORA / CADASTRO DE PEÇA -->
+    <div class="card">
+      <h2>2. Simular e Cadastrar Peça</h2>
+      <label>Nome da Peça</label>
+      <input type="text" id="nomePeca" placeholder="Ex: Vasinho Decorativo">
+      
+      <div class="grid">
+        <div>
+          <label>Filamento Usado (g)</label>
+          <input type="number" id="gramas" value="50" oninput="calcular()">
+        </div>
+        <div>
+          <label>Tempo Impressão (Horas)</label>
+          <input type="number" id="horas" step="0.1" value="3" oninput="calcular()">
+        </div>
+      </div>
+
+      <div class="grid">
+        <div>
+          <label>Taxa de Falha Opcional (%)</label>
+          <input type="number" id="taxaFalha" value="0" min="0" oninput="calcular()">
+        </div>
+        <div>
+          <label>Margem Desejada (%)</label>
+          <input type="number" id="margemPorcento" value="100" min="0" oninput="calcular()">
+        </div>
+      </div>
+
+      <label>Anexar Foto do Produto</label>
+      <input type="file" id="fotoInput" accept="image/*">
+
+      <div class="kpi-container" style="margin-top: 10px; margin-bottom: 10px;">
+        <div class="kpi">
+          <label>Custo Filamento</label>
+          <div id="resFilamento" class="kpi-val">R$ 0,00</div>
+        </div>
+        <div class="kpi">
+          <label>Custo Energia</label>
+          <div id="resEnergia" class="kpi-val">R$ 0,00</div>
+        </div>
+        <div class="kpi">
+          <label>Custo Total</label>
+          <div id="resCustoTotal" class="kpi-val">R$ 0,00</div>
+        </div>
+      </div>
+
+      <div class="kpi-container" style="margin-bottom: 15px;">
+        <div class="kpi">
+          <label>Preço Sugerido</label>
+          <div id="resPrecoSugerido" class="kpi-val green">R$ 0,00</div>
+        </div>
+        <div class="kpi" style="grid-column: span 2;">
+          <label>Lucro Estimado por Peça</label>
+          <div id="resLucro" class="kpi-val green">R$ 0,00</div>
+        </div>
+      </div>
+
+      <button onclick="salvarPeca()">Cadastrar Peça & Salvar no Catálogo</button>
+    </div>
+
+    <!-- REGISTRO DE VENDAS -->
+    <div class="card">
+      <h2>3. Registrar Venda</h2>
+      <label>Selecione a Peça Vendida</label>
+      <select id="selectPecas"></select>
+      
+      <label>Quantidade Vendida</label>
+      <input type="number" id="qtdVenda" value="1" min="1">
+      
+      <button onclick="registrarVenda()">Confirmar Venda</button>
+    </div>
+
+    <!-- HISTÓRICO DE VENDAS -->
+    <div class="card">
+      <h2>Histórico de Vendas</h2>
+      
+      <!-- FILTRO DE MÊS -->
+      <label>Filtrar Vendas por Mês</label>
+      <input type="month" id="filtroMes" onchange="renderizarVendas()">
+
+      <div class="kpi-container" style="margin-bottom: 15px;">
+        <div class="kpi">
+          <label>Total Vendas</label>
+          <div id="faturamentoTotal" class="kpi-val">R$ 0,00</div>
+        </div>
+        <div class="kpi">
+          <label>Custo Total</label>
+          <div id="custoTotalVendas" class="kpi-val">R$ 0,00</div>
+        </div>
+        <div class="kpi">
+          <label>Lucro Líquido</label>
+          <div id="lucroTotalVendas" class="kpi-val green">R$ 0,00</div>
+        </div>
+      </div>
+
+      <table id="tabelaVendas">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Peça</th>
+            <th>Qtd</th>
+            <th>Venda</th>
+            <th>Lucro</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <!-- ABA 2: CATÁLOGO DE PRODUTOS -->
+  <div id="aba-catalogo" class="tab-content">
+    <div class="card">
+      <h2>Catálogo de Peças Cadastradas</h2>
+      <div id="catalogoGrid" class="catalogo-grid">
+        <!-- As peças cadastradas serão renderizadas aqui -->
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let pecas = JSON.parse(localStorage.getItem('3d_pecas')) || [];
+  let vendas = JSON.parse(localStorage.getItem('3d_vendas')) || [];
+
+  function mudarAba(aba) {
+    document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+
+    if (aba === 'gestao') {
+      document.querySelectorAll('.tab-btn')[0].classList.add('active');
+      document.getElementById('aba-gestao').classList.add('active');
+    } else {
+      document.querySelectorAll('.tab-btn')[1].classList.add('active');
+      document.getElementById('aba-catalogo').classList.add('active');
+      renderizarCatalogo();
+    }
+  }
+
+  function calcular() {
+    const precoRolo = parseFloat(document.getElementById('precoRolo').value) || 0;
+    const pesoRolo = parseFloat(document.getElementById('pesoRolo').value) || 1;
+    const potenciaW = parseFloat(document.getElementById('potenciaW').value) || 0;
+    const custoKwh = parseFloat(document.getElementById('custoKwh').value) || 0;
+
+    const gramas = parseFloat(document.getElementById('gramas').value) || 0;
+    const horas = parseFloat(document.getElementById('horas').value) || 0;
+    const taxaFalha = parseFloat(document.getElementById('taxaFalha').value) || 0;
+    const margemPorcento = parseFloat(document.getElementById('margemPorcento').value) || 0;
+
+    const custoFilamento = (precoRolo / pesoRolo) * gramas;
+    const custoEnergia = (potenciaW / 1000) * horas * custoKwh;
+    
+    const custoBase = custoFilamento + custoEnergia;
+    const adicionalFalha = custoBase * (taxaFalha / 100);
+    const custoTotal = custoBase + adicionalFalha;
+
+    const lucroEstimado = custoTotal * (margemPorcento / 100);
+    const precoSugerido = custoTotal + lucroEstimado;
+
+    document.getElementById('resFilamento').innerText = `R$ ${custoFilamento.toFixed(2)}`;
+    document.getElementById('resEnergia').innerText = `R$ ${custoEnergia.toFixed(2)}`;
+    document.getElementById('resCustoTotal').innerText = `R$ ${custoTotal.toFixed(2)}`;
+    document.getElementById('resPrecoSugerido').innerText = `R$ ${precoSugerido.toFixed(2)}`;
+    document.getElementById('resLucro').innerText = `R$ ${lucroEstimado.toFixed(2)}`;
+
+    return { custoTotal, precoSugerido, lucroEstimado };
+  }
+
+  function salvarPeca() {
+    const nome = document.getElementById('nomePeca').value;
+    if (!nome) return alert('Insira o nome da peça!');
+
+    const fileInput = document.getElementById('fotoInput');
+    const calc = calcular();
+
+    if (fileInput.files && fileInput.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        concluirCadastroPeca(nome, e.target.result, calc);
+      };
+      reader.readAsDataURL(fileInput.files[0]);
+    } else {
+      concluirCadastroPeca(nome, 'https://via.placeholder.com/200?text=Sem+Foto', calc);
+    }
+  }
+
+  function concluirCadastroPeca(nome, fotoData, calc) {
+    const peca = {
+      id: Date.now(),
+      nome: nome,
+      foto: fotoData,
+      custoTotal: calc.custoTotal,
+      precoVenda: calc.precoSugerido,
+      lucroUnitario: calc.lucroEstimado
+    };
+
+    pecas.push(peca);
+    localStorage.setItem('3d_pecas', JSON.stringify(pecas));
+    
+    document.getElementById('nomePeca').value = '';
+    document.getElementById('fotoInput').value = '';
+    
+    atualizarSelectPecas();
+    alert('Peça cadastrada e enviada para o catálogo!');
+  }
+
+  function atualizarSelectPecas() {
+    const select = document.getElementById('selectPecas');
+    select.innerHTML = '';
+    pecas.forEach(p => {
+      const option = document.createElement('option');
+      option.value = p.id;
+      option.text = `${p.nome} - Venda: R$ ${p.precoVenda.toFixed(2)}`;
+      select.appendChild(option);
+    });
+  }
+
+  function registrarVenda() {
+    const pecaId = document.getElementById('selectPecas').value;
+    const qtd = parseInt(document.getElementById('qtdVenda').value) || 1;
+    const peca = pecas.find(p => p.id == pecaId);
+
+    if (!peca) return alert('Cadastre ao menos uma peça primeiro!');
+
+    const hoje = new Date();
+    const isoData = hoje.toISOString().split('T')[0]; // YYYY-MM-DD
+    const dataFormatada = hoje.toLocaleDateString('pt-BR');
+
+    const venda = {
+      id: Date.now(),
+      dataIso: isoData,
+      dataFormatada: dataFormatada,
+      nome: peca.nome,
+      qtd: qtd,
+      valorTotal: peca.precoVenda * qtd,
+      custoTotal: peca.custoTotal * qtd,
+      lucroTotal: peca.lucroUnitario * qtd
+    };
+
+    vendas.push(venda);
+    localStorage.setItem('3d_vendas', JSON.stringify(vendas));
+    renderizarVendas();
+  }
+
+  function deletarPeca(id) {
+    if (confirm('Deseja remover esta peça do catálogo?')) {
+      pecas = pecas.filter(p => p.id !== id);
+      localStorage.setItem('3d_pecas', JSON.stringify(pecas));
+      atualizarSelectPecas();
+      renderizarCatalogo();
+    }
+  }
+
+  function deletarVenda(id) {
+    vendas = vendas.filter(v => v.id !== id);
+    localStorage.setItem('3d_vendas', JSON.stringify(vendas));
+    renderizarVendas();
+  }
+
+  function renderizarCatalogo() {
+    const grid = document.getElementById('catalogoGrid');
+    grid.innerHTML = '';
+
+    if (pecas.length === 0) {
+      grid.innerHTML = '<p style="color: var(--text-sub); text-align: center; grid-column: span 2;">Nenhuma peça cadastrada no catálogo ainda.</p>';
+      return;
+    }
+
+    pecas.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'product-card';
+      card.innerHTML = `
+        <img src="${p.foto}" class="product-img" alt="${p.nome}">
+        <div class="product-info">
+          <div>
+            <div class="product-title">${p.nome}</div>
+            <div class="product-cost">Custo: R$ ${p.custoTotal.toFixed(2)}</div>
+            <div class="product-price">R$ ${p.precoVenda.toFixed(2)}</div>
+          </div>
+          <button class="btn-delete" style="margin-top: 8px;" onclick="deletarPeca(${p.id})">Excluir Peça</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  }
+
+  function renderizarVendas() {
+    const tbody = document.querySelector('#tabelaVendas tbody');
+    tbody.innerHTML = '';
+
+    const mesSelecionado = document.getElementById('filtroMes').value; // YYYY-MM
+
+    let fat = 0, custo = 0, lucro = 0;
+
+    const vendasFiltradas = vendas.filter(v => {
+      if (!mesSelecionado) return true;
+      const dataVenda = v.dataIso ? v.dataIso.substring(0, 7) : '';
+      return dataVenda === mesSelecionado;
+    });
+
+    vendasFiltradas.forEach(v => {
+      fat += v.valorTotal;
+      custo += v.custoTotal;
+      lucro += v.lucroTotal;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${v.dataFormatada || '-'}</td>
+        <td>${v.nome}</td>
+        <td>${v.qtd}</td>
+        <td>R$ ${v.valorTotal.toFixed(2)}</td>
+        <td style="color: var(--accent-hover)">R$ ${v.lucroTotal.toFixed(2)}</td>
+        <td><button class="btn-delete" onclick="deletarVenda(${v.id})">X</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('faturamentoTotal').innerText = `R$ ${fat.toFixed(2)}`;
+    document.getElementById('custoTotalVendas').innerText = `R$ ${custo.toFixed(2)}`;
+    document.getElementById('lucroTotalVendas').innerText = `R$ ${lucro.toFixed(2)}`;
+  }
+
+  // Inicialização
+  calcular();
+  atualizarSelectPecas();
+  renderizarVendas();
+</script>
+
+</body>
+</html>
