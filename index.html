@@ -52,6 +52,8 @@
       background: var(--accent); color: white; font-weight: bold; cursor: pointer; transition: 0.2s;
     }
     button:hover { background: var(--accent-hover); }
+    .btn-secondary { background: var(--border); color: var(--text); margin-bottom: 10px; }
+    .btn-secondary:hover { background: #41414d; }
     .kpi-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
     .kpi { background: var(--bg); padding: 10px; border-radius: 6px; border: 1px solid var(--border); }
     .kpi-val { font-size: 14px; font-weight: bold; margin-top: 4px; }
@@ -111,11 +113,9 @@
       </div>
     </div>
 
-    <!-- CALCULADORA / CADASTRO DE PEÇA -->
+    <!-- CALCULADORA / SIMULAÇÃO DE CUSTO -->
     <div class="card">
-      <h2>2. Simular e Cadastrar Peça</h2>
-      <label>Nome da Peça</label>
-      <input type="text" id="nomePeca" placeholder="Ex: Vasinho Decorativo">
+      <h2>2. Calculadora de Custo (Simulação)</h2>
       
       <div class="grid">
         <div>
@@ -139,9 +139,6 @@
         </div>
       </div>
 
-      <label>Anexar Foto do Produto</label>
-      <input type="file" id="fotoInput" accept="image/*">
-
       <div class="kpi-container" style="margin-top: 10px; margin-bottom: 10px;">
         <div class="kpi">
           <label>Custo Filamento</label>
@@ -152,12 +149,12 @@
           <div id="resEnergia" class="kpi-val">R$ 0,00</div>
         </div>
         <div class="kpi">
-          <label>Custo Total</label>
+          <label>Custo Total Base</label>
           <div id="resCustoTotal" class="kpi-val">R$ 0,00</div>
         </div>
       </div>
 
-      <div class="kpi-container" style="margin-bottom: 15px;">
+      <div class="kpi-container">
         <div class="kpi">
           <label>Preço Sugerido</label>
           <div id="resPrecoSugerido" class="kpi-val green">R$ 0,00</div>
@@ -167,19 +164,57 @@
           <div id="resLucro" class="kpi-val green">R$ 0,00</div>
         </div>
       </div>
+    </div>
 
-      <button onclick="salvarPeca()">Cadastrar Peça & Salvar no Catálogo</button>
+    <!-- CADASTRO DE PEÇA SEPARADO -->
+    <div class="card">
+      <h2>3. Cadastrar Nova Peça no Catálogo</h2>
+      
+      <label>Nome da Peça</label>
+      <input type="text" id="nomePeca" placeholder="Ex: Vasinho Decorativo">
+
+      <div class="grid">
+        <div>
+          <label>Custo de Produção (R$)</label>
+          <input type="number" id="custoPecaCadastro" step="0.01" placeholder="0.00">
+        </div>
+        <div>
+          <label>Preço de Venda Desejado (R$)</label>
+          <input type="number" id="precoPecaCadastro" step="0.01" placeholder="0.00">
+        </div>
+      </div>
+
+      <button type="button" class="btn-secondary" onclick="usarValoresSimulados()">Usar Valores da Simulação Acima</button>
+
+      <label>Anexar Foto do Produto</label>
+      <input type="file" id="fotoInput" accept="image/*">
+
+      <button onclick="salvarPeca()">Cadastrar Peça no Catálogo</button>
     </div>
 
     <!-- REGISTRO DE VENDAS -->
     <div class="card">
-      <h2>3. Registrar Venda</h2>
+      <h2>4. Registrar Venda</h2>
+      
       <label>Selecione a Peça Vendida</label>
-      <select id="selectPecas"></select>
+      <select id="selectPecas" onchange="aoSelecionarPecaVenda()"></select>
       
-      <label>Quantidade Vendida</label>
-      <input type="number" id="qtdVenda" value="1" min="1">
-      
+      <div class="grid">
+        <div>
+          <label>Quantidade Vendida</label>
+          <input type="number" id="qtdVenda" value="1" min="1" oninput="atualizarTotalVenda()">
+        </div>
+        <div>
+          <label>Valor Unitário Vendido (R$)</label>
+          <input type="number" id="valorUnitarioVenda" step="0.01" placeholder="0.00" oninput="atualizarTotalVenda()">
+        </div>
+      </div>
+
+      <div class="kpi" style="margin-bottom: 10px;">
+        <label>Valor Total da Venda</label>
+        <div id="resTotalVendaModificavel" class="kpi-val green">R$ 0,00</div>
+      </div>
+
       <button onclick="registrarVenda()">Confirmar Venda</button>
     </div>
 
@@ -280,68 +315,112 @@
     document.getElementById('resPrecoSugerido').innerText = `R$ ${precoSugerido.toFixed(2)}`;
     document.getElementById('resLucro').innerText = `R$ ${lucroEstimado.toFixed(2)}`;
 
-    return { custoTotal, precoSugerido, lucroEstimado };
+    return { custoTotal, precoSugerido };
+  }
+
+  function usarValoresSimulados() {
+    const calc = calcular();
+    document.getElementById('custoPecaCadastro').value = calc.custoTotal.toFixed(2);
+    document.getElementById('precoPecaCadastro').value = calc.precoSugerido.toFixed(2);
   }
 
   function salvarPeca() {
     const nome = document.getElementById('nomePeca').value;
+    const custoInput = parseFloat(document.getElementById('custoPecaCadastro').value);
+    const precoInput = parseFloat(document.getElementById('precoPecaCadastro').value);
+
     if (!nome) return alert('Insira o nome da peça!');
+    if (isNaN(custoInput)) return alert('Insira o custo de produção!');
+    if (isNaN(precoInput)) return alert('Insira o preço de venda!');
 
     const fileInput = document.getElementById('fotoInput');
-    const calc = calcular();
 
     if (fileInput.files && fileInput.files[0]) {
       const reader = new FileReader();
       reader.onload = function (e) {
-        concluirCadastroPeca(nome, e.target.result, calc);
+        concluirCadastroPeca(nome, e.target.result, custoInput, precoInput);
       };
       reader.readAsDataURL(fileInput.files[0]);
     } else {
-      concluirCadastroPeca(nome, 'https://via.placeholder.com/200?text=Sem+Foto', calc);
+      concluirCadastroPeca(nome, 'https://via.placeholder.com/200?text=Sem+Foto', custoInput, precoInput);
     }
   }
 
-  function concluirCadastroPeca(nome, fotoData, calc) {
+  function concluirCadastroPeca(nome, fotoData, custoTotal, precoVenda) {
     const peca = {
       id: Date.now(),
       nome: nome,
       foto: fotoData,
-      custoTotal: calc.custoTotal,
-      precoVenda: calc.precoSugerido,
-      lucroUnitario: calc.lucroEstimado
+      custoTotal: custoTotal,
+      precoVenda: precoVenda
     };
 
     pecas.push(peca);
     localStorage.setItem('3d_pecas', JSON.stringify(pecas));
     
     document.getElementById('nomePeca').value = '';
+    document.getElementById('custoPecaCadastro').value = '';
+    document.getElementById('precoPecaCadastro').value = '';
     document.getElementById('fotoInput').value = '';
     
     atualizarSelectPecas();
-    alert('Peça cadastrada e enviada para o catálogo!');
+    alert('Peça cadastrada com sucesso!');
   }
 
   function atualizarSelectPecas() {
     const select = document.getElementById('selectPecas');
     select.innerHTML = '';
+
+    if (pecas.length === 0) {
+      select.innerHTML = '<option value="">Nenhuma peça cadastrada</option>';
+      document.getElementById('valorUnitarioVenda').value = '';
+      atualizarTotalVenda();
+      return;
+    }
+
     pecas.forEach(p => {
       const option = document.createElement('option');
       option.value = p.id;
-      option.text = `${p.nome} - Venda: R$ ${p.precoVenda.toFixed(2)}`;
+      option.text = `${p.nome} - (Sugerido: R$ ${p.precoVenda.toFixed(2)})`;
       select.appendChild(option);
     });
+
+    aoSelecionarPecaVenda();
+  }
+
+  function aoSelecionarPecaVenda() {
+    const pecaId = document.getElementById('selectPecas').value;
+    const peca = pecas.find(p => p.id == pecaId);
+    if (peca) {
+      document.getElementById('valorUnitarioVenda').value = peca.precoVenda.toFixed(2);
+    }
+    atualizarTotalVenda();
+  }
+
+  function atualizarTotalVenda() {
+    const qtd = parseInt(document.getElementById('qtdVenda').value) || 0;
+    const valorUnitario = parseFloat(document.getElementById('valorUnitarioVenda').value) || 0;
+    const total = qtd * valorUnitario;
+    document.getElementById('resTotalVendaModificavel').innerText = `R$ ${total.toFixed(2)}`;
   }
 
   function registrarVenda() {
     const pecaId = document.getElementById('selectPecas').value;
     const qtd = parseInt(document.getElementById('qtdVenda').value) || 1;
+    const valorUnitario = parseFloat(document.getElementById('valorUnitarioVenda').value);
+
     const peca = pecas.find(p => p.id == pecaId);
 
-    if (!peca) return alert('Cadastre ao menos uma peça primeiro!');
+    if (!peca) return alert('Cadastre e selecione uma peça primeiro!');
+    if (isNaN(valorUnitario)) return alert('Informe um valor unitário para a venda!');
 
     const hoje = new Date();
-    const isoData = hoje.toISOString().split('T')[0]; // YYYY-MM-DD
+    const isoData = hoje.toISOString().split('T')[0];
     const dataFormatada = hoje.toLocaleDateString('pt-BR');
+
+    const valorTotalVenda = valorUnitario * qtd;
+    const custoTotalVenda = peca.custoTotal * qtd;
+    const lucroTotalVenda = valorTotalVenda - custoTotalVenda;
 
     const venda = {
       id: Date.now(),
@@ -349,14 +428,15 @@
       dataFormatada: dataFormatada,
       nome: peca.nome,
       qtd: qtd,
-      valorTotal: peca.precoVenda * qtd,
-      custoTotal: peca.custoTotal * qtd,
-      lucroTotal: peca.lucroUnitario * qtd
+      valorTotal: valorTotalVenda,
+      custoTotal: custoTotalVenda,
+      lucroTotal: lucroTotalVenda
     };
 
     vendas.push(venda);
     localStorage.setItem('3d_vendas', JSON.stringify(vendas));
     renderizarVendas();
+    alert('Venda registrada com sucesso!');
   }
 
   function deletarPeca(id) {
@@ -405,7 +485,7 @@
     const tbody = document.querySelector('#tabelaVendas tbody');
     tbody.innerHTML = '';
 
-    const mesSelecionado = document.getElementById('filtroMes').value; // YYYY-MM
+    const mesSelecionado = document.getElementById('filtroMes').value;
 
     let fat = 0, custo = 0, lucro = 0;
 
