@@ -27,7 +27,6 @@
     .app { width: 100%; max-width: 650px; }
     h1, h2 { text-align: center; color: var(--text); margin-bottom: 15px; }
     
-    /* ABAS */
     .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
     .tab-btn {
       flex: 1; padding: 12px; background: var(--card-bg); color: var(--text-sub);
@@ -52,6 +51,7 @@
       background: var(--accent); color: white; font-weight: bold; cursor: pointer; transition: 0.2s;
     }
     button:hover { background: var(--accent-hover); }
+    button:disabled { background: var(--border); cursor: not-allowed; }
     .btn-secondary { background: var(--border); color: var(--text); margin-bottom: 10px; }
     .btn-secondary:hover { background: #41414d; }
     .kpi-container { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
@@ -63,7 +63,6 @@
     th { color: var(--text-sub); }
     .btn-delete { background: var(--danger); width: auto; padding: 4px 8px; font-size: 11px; }
 
-    /* CATÁLOGO CARDS */
     .catalogo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; }
     .product-card {
       background: var(--bg); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
@@ -186,10 +185,10 @@
 
       <button type="button" class="btn-secondary" onclick="usarValoresSimulados()">Usar Valores da Simulação Acima</button>
 
-      <label>Anexar Foto do Produto</label>
+      <label>Anexar Foto do Produto (Firebase Storage)</label>
       <input type="file" id="fotoInput" accept="image/*">
 
-      <button onclick="salvarPeca()">Cadastrar Peça no Catálogo</button>
+      <button id="btnCadastrar" onclick="salvarPeca()">Cadastrar Peça no Catálogo</button>
     </div>
 
     <!-- REGISTRO DE VENDAS -->
@@ -222,7 +221,6 @@
     <div class="card">
       <h2>Histórico de Vendas</h2>
       
-      <!-- FILTRO DE MÊS -->
       <label>Filtrar Vendas por Mês</label>
       <input type="month" id="filtroMes" onchange="renderizarVendas()">
 
@@ -262,18 +260,243 @@
   <div id="aba-catalogo" class="tab-content">
     <div class="card">
       <h2>Catálogo de Peças Cadastradas</h2>
-      <div id="catalogoGrid" class="catalogo-grid">
-        <!-- As peças cadastradas serão renderizadas aqui -->
-      </div>
+      <div id="catalogoGrid" class="catalogo-grid"></div>
     </div>
   </div>
 
 </div>
 
-<script>
-  let pecas = JSON.parse(localStorage.getItem('3d_pecas')) || [];
-  let vendas = JSON.parse(localStorage.getItem('3d_vendas')) || [];
+<!-- SDKs do Firebase -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-storage.js";
 
+  const firebaseConfig = {
+    apiKey: "AIzaSyAlV00-Z_1VjEkuTT9UGwhWZetdQaNJjjQ",
+    authDomain: "printlab-b03f7.firebaseapp.com",
+    projectId: "printlab-b03f7",
+    storageBucket: "printlab-b03f7.firebasestorage.app",
+    messagingSenderId: "135570002702",
+    appId: "1:135570002702:web:222dab28515168a6d97d5f",
+    measurementId: "G-ENNEFLHWP4"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  const storage = getStorage(app);
+
+  let pecas = [];
+  let vendas = [];
+
+  // SINCRONIZAÇÃO EM TEMPO REAL COM FIREBASE
+  onSnapshot(collection(db, "pecas"), (snapshot) => {
+    pecas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    atualizarSelectPecas();
+    renderizarCatalogo();
+  });
+
+  onSnapshot(collection(db, "vendas"), (snapshot) => {
+    vendas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    renderizarVendas();
+  });
+
+  // CADASTRO DE PEÇAS E UPLOAD DE IMAGEM
+  window.salvarPeca = async function() {
+    const nome = document.getElementById('nomePeca').value;
+    const custoInput = parseFloat(document.getElementById('custoPecaCadastro').value);
+    const precoInput = parseFloat(document.getElementById('precoPecaCadastro').value);
+    const fileInput = document.getElementById('fotoInput');
+
+    if (!nome) return alert('Insira o nome da peça!');
+    if (isNaN(custoInput)) return alert('Insira o custo de produção!');
+    if (isNaN(precoInput)) return alert('Insira o preço de venda!');
+
+    const btn = document.getElementById('btnCadastrar');
+    btn.disabled = true;
+    btn.innerText = "Enviando imagem e salvando...";
+
+    let fotoUrl = 'https://via.placeholder.com/200?text=Sem+Foto';
+
+    try {
+      if (fileInput.files && fileInput.files[0]) {
+        const file = fileInput.files[0];
+        const storageRef = ref(storage, `produtos/${Date.now()}_${file.name}`);
+        const snapshot = await uploadBytes(storageRef, file);
+        fotoUrl = await getDownloadURL(snapshot.ref);
+      }
+
+      await addDoc(collection(db, "pecas"), {
+        nome: nome,
+        foto: fotoUrl,
+        custoTotal: custoInput,
+        precoVenda: precoInput,
+        criadoEm: new Date().toISOString()
+      });
+
+      document.getElementById('nomePeca').value = '';
+      document.getElementById('custoPecaCadastro').value = '';
+      document.getElementById('precoPecaCadastro').value = '';
+      document.getElementById('fotoInput').value = '';
+      alert('Peça salva no Firebase com sucesso!');
+    } catch (e) {
+      console.error("Erro ao salvar:", e);
+      alert('Erro ao salvar no Firebase. Verifique se ativou o Firestore e Storage no console.');
+    } finally {
+      btn.disabled = false;
+      btn.innerText = "Cadastrar Peça no Catálogo";
+    }
+  };
+
+  // REGISTRO DE VENDAS
+  window.registrarVenda = async function() {
+    const pecaId = document.getElementById('selectPecas').value;
+    const qtd = parseInt(document.getElementById('qtdVenda').value) || 1;
+    const valorUnitario = parseFloat(document.getElementById('valorUnitarioVenda').value);
+
+    const peca = pecas.find(p => p.id == pecaId);
+
+    if (!peca) return alert('Cadastre e selecione uma peça primeiro!');
+    if (isNaN(valorUnitario)) return alert('Informe um valor unitário!');
+
+    const hoje = new Date();
+    const isoData = hoje.toISOString().split('T')[0];
+    const dataFormatada = hoje.toLocaleDateString('pt-BR');
+
+    const valorTotalVenda = valorUnitario * qtd;
+    const custoTotalVenda = peca.custoTotal * qtd;
+    const lucroTotalVenda = valorTotalVenda - custoTotalVenda;
+
+    try {
+      await addDoc(collection(db, "vendas"), {
+        dataIso: isoData,
+        dataFormatada: dataFormatada,
+        nome: peca.nome,
+        qtd: qtd,
+        valorTotal: valorTotalVenda,
+        custoTotal: custoTotalVenda,
+        lucroTotal: lucroTotalVenda,
+        timestamp: Date.now()
+      });
+      alert('Venda registrada no Firebase!');
+    } catch (e) {
+      alert('Erro ao registrar venda.');
+    }
+  };
+
+  window.deletarPeca = async function(id) {
+    if (confirm('Deseja remover esta peça?')) {
+      await deleteDoc(doc(db, "pecas", id));
+    }
+  };
+
+  window.deletarVenda = async function(id) {
+    if (confirm('Deseja cancelar este registro de venda?')) {
+      await deleteDoc(doc(db, "vendas", id));
+    }
+  };
+
+  window.atualizarSelectPecas = function() {
+    const select = document.getElementById('selectPecas');
+    select.innerHTML = '';
+
+    if (pecas.length === 0) {
+      select.innerHTML = '<option value="">Nenhuma peça cadastrada</option>';
+      document.getElementById('valorUnitarioVenda').value = '';
+      window.atualizarTotalVenda();
+      return;
+    }
+
+    pecas.forEach(p => {
+      const option = document.createElement('option');
+      option.value = p.id;
+      option.text = `${p.nome} - (Sugerido: R$ ${p.precoVenda.toFixed(2)})`;
+      select.appendChild(option);
+    });
+
+    window.aoSelecionarPecaVenda();
+  };
+
+  window.aoSelecionarPecaVenda = function() {
+    const pecaId = document.getElementById('selectPecas').value;
+    const peca = pecas.find(p => p.id == pecaId);
+    if (peca) {
+      document.getElementById('valorUnitarioVenda').value = peca.precoVenda.toFixed(2);
+    }
+    window.atualizarTotalVenda();
+  };
+
+  window.atualizarTotalVenda = function() {
+    const qtd = parseInt(document.getElementById('qtdVenda').value) || 0;
+    const valorUnitario = parseFloat(document.getElementById('valorUnitarioVenda').value) || 0;
+    const total = qtd * valorUnitario;
+    document.getElementById('resTotalVendaModificavel').innerText = `R$ ${total.toFixed(2)}`;
+  };
+
+  window.renderizarCatalogo = function() {
+    const grid = document.getElementById('catalogoGrid');
+    grid.innerHTML = '';
+
+    if (pecas.length === 0) {
+      grid.innerHTML = '<p style="color: var(--text-sub); text-align: center; grid-column: span 2;">Nenhuma peça cadastrada.</p>';
+      return;
+    }
+
+    pecas.forEach(p => {
+      const card = document.createElement('div');
+      card.className = 'product-card';
+      card.innerHTML = `
+        <img src="${p.foto}" class="product-img" alt="${p.nome}">
+        <div class="product-info">
+          <div>
+            <div class="product-title">${p.nome}</div>
+            <div class="product-cost">Custo: R$ ${p.custoTotal.toFixed(2)}</div>
+            <div class="product-price">R$ ${p.precoVenda.toFixed(2)}</div>
+          </div>
+          <button class="btn-delete" style="margin-top: 8px;" onclick="deletarPeca('${p.id}')">Excluir Peça</button>
+        </div>
+      `;
+      grid.appendChild(card);
+    });
+  };
+
+  window.renderizarVendas = function() {
+    const tbody = document.querySelector('#tabelaVendas tbody');
+    tbody.innerHTML = '';
+
+    const mesSelecionado = document.getElementById('filtroMes').value;
+    let fat = 0, custo = 0, lucro = 0;
+
+    const vendasFiltradas = vendas.filter(v => {
+      if (!mesSelecionado) return true;
+      const dataVenda = v.dataIso ? v.dataIso.substring(0, 7) : '';
+      return dataVenda === mesSelecionado;
+    });
+
+    vendasFiltradas.forEach(v => {
+      fat += v.valorTotal;
+      custo += v.custoTotal;
+      lucro += v.lucroTotal;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${v.dataFormatada || '-'}</td>
+        <td>${v.nome}</td>
+        <td>${v.qtd}</td>
+        <td>R$ ${v.valorTotal.toFixed(2)}</td>
+        <td style="color: var(--accent-hover)">R$ ${v.lucroTotal.toFixed(2)}</td>
+        <td><button class="btn-delete" onclick="deletarVenda('${v.id}')">X</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('faturamentoTotal').innerText = `R$ ${fat.toFixed(2)}`;
+    document.getElementById('custoTotalVendas').innerText = `R$ ${custo.toFixed(2)}`;
+    document.getElementById('lucroTotalVendas').innerText = `R$ ${lucro.toFixed(2)}`;
+  };
+</script>
+
+<script>
   function mudarAba(aba) {
     document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
@@ -284,7 +507,7 @@
     } else {
       document.querySelectorAll('.tab-btn')[1].classList.add('active');
       document.getElementById('aba-catalogo').classList.add('active');
-      renderizarCatalogo();
+      if (window.renderizarCatalogo) window.renderizarCatalogo();
     }
   }
 
@@ -324,203 +547,7 @@
     document.getElementById('precoPecaCadastro').value = calc.precoSugerido.toFixed(2);
   }
 
-  function salvarPeca() {
-    const nome = document.getElementById('nomePeca').value;
-    const custoInput = parseFloat(document.getElementById('custoPecaCadastro').value);
-    const precoInput = parseFloat(document.getElementById('precoPecaCadastro').value);
-
-    if (!nome) return alert('Insira o nome da peça!');
-    if (isNaN(custoInput)) return alert('Insira o custo de produção!');
-    if (isNaN(precoInput)) return alert('Insira o preço de venda!');
-
-    const fileInput = document.getElementById('fotoInput');
-
-    if (fileInput.files && fileInput.files[0]) {
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        concluirCadastroPeca(nome, e.target.result, custoInput, precoInput);
-      };
-      reader.readAsDataURL(fileInput.files[0]);
-    } else {
-      concluirCadastroPeca(nome, 'https://via.placeholder.com/200?text=Sem+Foto', custoInput, precoInput);
-    }
-  }
-
-  function concluirCadastroPeca(nome, fotoData, custoTotal, precoVenda) {
-    const peca = {
-      id: Date.now(),
-      nome: nome,
-      foto: fotoData,
-      custoTotal: custoTotal,
-      precoVenda: precoVenda
-    };
-
-    pecas.push(peca);
-    localStorage.setItem('3d_pecas', JSON.stringify(pecas));
-    
-    document.getElementById('nomePeca').value = '';
-    document.getElementById('custoPecaCadastro').value = '';
-    document.getElementById('precoPecaCadastro').value = '';
-    document.getElementById('fotoInput').value = '';
-    
-    atualizarSelectPecas();
-    alert('Peça cadastrada com sucesso!');
-  }
-
-  function atualizarSelectPecas() {
-    const select = document.getElementById('selectPecas');
-    select.innerHTML = '';
-
-    if (pecas.length === 0) {
-      select.innerHTML = '<option value="">Nenhuma peça cadastrada</option>';
-      document.getElementById('valorUnitarioVenda').value = '';
-      atualizarTotalVenda();
-      return;
-    }
-
-    pecas.forEach(p => {
-      const option = document.createElement('option');
-      option.value = p.id;
-      option.text = `${p.nome} - (Sugerido: R$ ${p.precoVenda.toFixed(2)})`;
-      select.appendChild(option);
-    });
-
-    aoSelecionarPecaVenda();
-  }
-
-  function aoSelecionarPecaVenda() {
-    const pecaId = document.getElementById('selectPecas').value;
-    const peca = pecas.find(p => p.id == pecaId);
-    if (peca) {
-      document.getElementById('valorUnitarioVenda').value = peca.precoVenda.toFixed(2);
-    }
-    atualizarTotalVenda();
-  }
-
-  function atualizarTotalVenda() {
-    const qtd = parseInt(document.getElementById('qtdVenda').value) || 0;
-    const valorUnitario = parseFloat(document.getElementById('valorUnitarioVenda').value) || 0;
-    const total = qtd * valorUnitario;
-    document.getElementById('resTotalVendaModificavel').innerText = `R$ ${total.toFixed(2)}`;
-  }
-
-  function registrarVenda() {
-    const pecaId = document.getElementById('selectPecas').value;
-    const qtd = parseInt(document.getElementById('qtdVenda').value) || 1;
-    const valorUnitario = parseFloat(document.getElementById('valorUnitarioVenda').value);
-
-    const peca = pecas.find(p => p.id == pecaId);
-
-    if (!peca) return alert('Cadastre e selecione uma peça primeiro!');
-    if (isNaN(valorUnitario)) return alert('Informe um valor unitário para a venda!');
-
-    const hoje = new Date();
-    const isoData = hoje.toISOString().split('T')[0];
-    const dataFormatada = hoje.toLocaleDateString('pt-BR');
-
-    const valorTotalVenda = valorUnitario * qtd;
-    const custoTotalVenda = peca.custoTotal * qtd;
-    const lucroTotalVenda = valorTotalVenda - custoTotalVenda;
-
-    const venda = {
-      id: Date.now(),
-      dataIso: isoData,
-      dataFormatada: dataFormatada,
-      nome: peca.nome,
-      qtd: qtd,
-      valorTotal: valorTotalVenda,
-      custoTotal: custoTotalVenda,
-      lucroTotal: lucroTotalVenda
-    };
-
-    vendas.push(venda);
-    localStorage.setItem('3d_vendas', JSON.stringify(vendas));
-    renderizarVendas();
-    alert('Venda registrada com sucesso!');
-  }
-
-  function deletarPeca(id) {
-    if (confirm('Deseja remover esta peça do catálogo?')) {
-      pecas = pecas.filter(p => p.id !== id);
-      localStorage.setItem('3d_pecas', JSON.stringify(pecas));
-      atualizarSelectPecas();
-      renderizarCatalogo();
-    }
-  }
-
-  function deletarVenda(id) {
-    vendas = vendas.filter(v => v.id !== id);
-    localStorage.setItem('3d_vendas', JSON.stringify(vendas));
-    renderizarVendas();
-  }
-
-  function renderizarCatalogo() {
-    const grid = document.getElementById('catalogoGrid');
-    grid.innerHTML = '';
-
-    if (pecas.length === 0) {
-      grid.innerHTML = '<p style="color: var(--text-sub); text-align: center; grid-column: span 2;">Nenhuma peça cadastrada no catálogo ainda.</p>';
-      return;
-    }
-
-    pecas.forEach(p => {
-      const card = document.createElement('div');
-      card.className = 'product-card';
-      card.innerHTML = `
-        <img src="${p.foto}" class="product-img" alt="${p.nome}">
-        <div class="product-info">
-          <div>
-            <div class="product-title">${p.nome}</div>
-            <div class="product-cost">Custo: R$ ${p.custoTotal.toFixed(2)}</div>
-            <div class="product-price">R$ ${p.precoVenda.toFixed(2)}</div>
-          </div>
-          <button class="btn-delete" style="margin-top: 8px;" onclick="deletarPeca(${p.id})">Excluir Peça</button>
-        </div>
-      `;
-      grid.appendChild(card);
-    });
-  }
-
-  function renderizarVendas() {
-    const tbody = document.querySelector('#tabelaVendas tbody');
-    tbody.innerHTML = '';
-
-    const mesSelecionado = document.getElementById('filtroMes').value;
-
-    let fat = 0, custo = 0, lucro = 0;
-
-    const vendasFiltradas = vendas.filter(v => {
-      if (!mesSelecionado) return true;
-      const dataVenda = v.dataIso ? v.dataIso.substring(0, 7) : '';
-      return dataVenda === mesSelecionado;
-    });
-
-    vendasFiltradas.forEach(v => {
-      fat += v.valorTotal;
-      custo += v.custoTotal;
-      lucro += v.lucroTotal;
-
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${v.dataFormatada || '-'}</td>
-        <td>${v.nome}</td>
-        <td>${v.qtd}</td>
-        <td>R$ ${v.valorTotal.toFixed(2)}</td>
-        <td style="color: var(--accent-hover)">R$ ${v.lucroTotal.toFixed(2)}</td>
-        <td><button class="btn-delete" onclick="deletarVenda(${v.id})">X</button></td>
-      `;
-      tbody.appendChild(tr);
-    });
-
-    document.getElementById('faturamentoTotal').innerText = `R$ ${fat.toFixed(2)}`;
-    document.getElementById('custoTotalVendas').innerText = `R$ ${custo.toFixed(2)}`;
-    document.getElementById('lucroTotalVendas').innerText = `R$ ${lucro.toFixed(2)}`;
-  }
-
-  // Inicialização
   calcular();
-  atualizarSelectPecas();
-  renderizarVendas();
 </script>
 
 </body>
